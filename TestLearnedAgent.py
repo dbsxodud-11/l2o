@@ -120,6 +120,8 @@ for batch_idx, batch_sample in enumerate(test_loader):
         with torch.no_grad():
             _, action, _, _, _, hidden = model(state, best_state, hidden)
         action = action.cpu().numpy()
+        print(action.shape)
+        # print(kyle)
         state, reward, _, best_distance, distance, best_state = env.step(action)
         sum_reward += reward
         t += 1

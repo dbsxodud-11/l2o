@@ -378,7 +378,8 @@ def run_episode(env, method='rule', rule='EDD', decision_tree=None, chromosome=N
         if method == 'chrm':
             copy_choromosome.append((job_i, mc_i))
             copy_choromosome = update_chromosome(copy_choromosome, assign_job_ids)
-
+    # if method == 'chrm':
+    #     print(kyle)
     return env.get_obj()
 
 
@@ -506,6 +507,7 @@ def get_fitness(env, pop_):
     obj_list = []
     for chrm in pop_:
         env_ = copy.deepcopy(env)
+        chrm = np.random.permutation(list(env_.jobs.keys())).tolist()
         obj_list.append(run_episode(env_, method='chrm', chromosome=chrm)[0])
     fit_list = obj_list
     max_fit = max(fit_list)
@@ -616,6 +618,8 @@ def run_GA(env, configs):
     gen = 0
     pop_ = get_init_population(env, genes, pop_size)
     while True:
+        # print(pop_[0])
+        # print(kyle)
         fit_list, obj_list = get_fitness(env, pop_)
         best_chrm, best_obj = get_best(pop_, fit_list, obj_list)
         print_best_obj(best_obj, gen)
@@ -678,7 +682,7 @@ if __name__ == "__main__":
             'crossover_prob': 0.8,
             'mutation_prob': 0.1,
             'maximum_generation': 20,
-            'hybrid_prob': 0,
+            'hybrid_prob': 0.1,
             'hybrid_iteration': 5,
             }
 
