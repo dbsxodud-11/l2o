@@ -96,7 +96,7 @@ env = JobShopEnv(wip_TF=True, obj=obj, setup_type='sequence', instance_i=i)
 
 mc_i, job_dict, done, _ = env.reset()
 prev_job_ids = []
-batch_size = 5
+batch_size = 20
 
 while not done:
     if new_job_arrived(env, prev_job_ids):
@@ -105,62 +105,70 @@ while not done:
         # best_chromosome = run_GA(copy_env, configs)
         # best_chromosome = np.random.permutation(list(env.jobs.keys())).tolist()
         # best_chromosome = run_LGA(copy_env, configs)
-        # env_ = copy.deepcopy(copy_env)
+        env_ = copy.deepcopy(copy_env)
         # chrm = np.random.permutation(list(env_.jobs.keys())).tolist()
         # print(run_episode(env_, method='chrm', chromosome=chrm)[0])
         # print(kyle)
-        # rules = ['SPT', 'LPT', 'FIFO', 'LIFO', 'EDD']
-        # init_pop = [get_chrm_from_rule(env, 'EDD') for rule in rules]
-        # chromosome = init_pop + [np.random.permutation(list(env.jobs.keys())).tolist() for _ in range(batch_size - len(init_pop))]
-        chromosome = get_chrm_from_rule(env, 'EDD')
+        rules = ['SPT', 'LPT', 'FIFO', 'LIFO', 'EDD']
+        init_pop = [get_chrm_from_rule(env_, rule) for rule in rules]
+        chromosome = init_pop + [np.random.permutation(list(env_.jobs.keys())).tolist() for _ in range(batch_size - len(init_pop))]
+        # chromosome = get_chrm_from_rule(env, 'EDD')
         # chromosome = np.random.permutation(list(env.jobs.keys())).tolist()
         
-        state = torch.zeros((1, len(chromosome), 2)).cuda()
+        state = torch.zeros((batch_size, len(chromosome[0]), 2)).cuda()
         for j, k in enumerate(list(env.jobs.values())):
-            state[0, j, 0] = k.ready
-            state[0, j, 1] = k.due
-            
-        env_ = copy.deepcopy(copy_env)
-        obj = run_episode(env_, method='chrm', chromosome=chromosome)[0]
-        print(f"step==0\tbest_obj=={obj}")
+            state[:, j, 0] = torch.FloatTensor([k.ready for _ in range(batch_size)]).cuda()
+            state[:, j, 1] = torch.FloatTensor([k.due for _ in range(batch_size)]).cuda()
+        
+        obj_list = []
+        for b in range(batch_size):
+            env_ = copy.deepcopy(copy_env)
+            obj = run_episode(env_, method='chrm', chromosome=chromosome[b])[0]
+            obj_list.append(obj)
+        print(f"step==0\tbest_obj=={min(obj_list)}")
         
         best_chromosome = copy.deepcopy(chromosome) 
         best_state = state.clone()
-        best_obj = obj
+        # best_obj = obj
+        best_obj_list = obj_list
         hidden = None
         
-        for step in tqdm(range(2000)):
+        for step in tqdm(range(200)):
             with torch.no_grad():
                 _, action, _, _, _, hidden = model(state, best_state, hidden)
             # print(action.shape)
             new_chromosome = copy.deepcopy(chromosome)
-            # for b in range(batch_size):
-            new_chromosome[action[0, 0]] = chromosome[action[0, 1]]
-            new_chromosome[action[0, 1]] = chromosome[action[0, 0]]
+            for b in range(batch_size):
+                new_chromosome[b][action[b, 0]] = chromosome[b][action[b, 1]]
+                new_chromosome[b][action[b, 1]] = chromosome[b][action[b, 0]]
             
             new_state = state.clone()
-            # for b in range(batch_size):
-            new_state[0, action[0, 0]] = state[0, action[0, 1]]
-            new_state[0, action[0, 1]] = state[0, action[0, 0]]
+            for b in range(batch_size):
+                new_state[b, action[b, 0]] = state[b, action[b, 1]]
+                new_state[b, action[b, 1]] = state[b, action[b, 0]]
             
-            # new_obj_list = []
-            # for b in range(batch_size):
-            env_ = copy.deepcopy(copy_env)
-            new_obj = run_episode(env_, method='chrm', chromosome=new_chromosome)[0]
-                # new_obj_list.append(new_obj)
+            new_obj_list = []
+            for b in range(batch_size):
+                env_ = copy.deepcopy(copy_env)
+                new_obj = run_episode(env_, method='chrm', chromosome=new_chromosome[b])[0]
+                new_obj_list.append(new_obj)
             # state = new_state
             # chromosome = new_chromosome
-            if new_obj < best_obj:
-                state = new_state
-                chromosome = new_chromosome
-                
-                best_chromosome = new_chromosome
-                best_state = new_state
-                # print(best_obj)
-                best_obj = new_obj
+                if new_obj < best_obj_list[b]:
+                    state[b] = new_state[b]
+                    chromosome[b] = new_chromosome[b]
+                    
+                    best_chromosome[b] = new_chromosome[b]
+                    best_state[b] = new_state[b]
+                    # print(best_obj)
+                    # best_obj = new_obj
+                    best_obj_list[b] = new_obj
             
-            if (step+1) % 1000 == 0:
-                print(f"step=={step+1}\tbest_obj=={best_obj}")
+            if (step+1) % 100 == 0:
+                print(f"step=={step+1}\tbest_obj=={min(best_obj_list)}")
+
+        best_chromosome = best_chromosome[np.array(best_obj_list).argmin()]
+                
     prev_job_ids = list(env.jobs.keys())
     factory_info = get_factory_info(env, mc_i)
     job_i, mc_i = get_action_chrm(job_dict, mc_i, factory_info=factory_info, chromosome=best_chromosome)
@@ -213,3 +221,5 @@ print("performance of L2O for instance {}: {} - makespan: {}".format(i, obj_valu
 
 
 # performance of GA for instance 11: (80536, 10908) - makespan: 4810
+# performance of L2O for instance 11: (66868, 9661) - makespan: 4589
+# performance of L2O for instance 11: (67955, 10139) - makespan: 4692
