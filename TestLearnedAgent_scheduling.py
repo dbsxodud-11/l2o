@@ -48,6 +48,7 @@ parser.add_argument('--graph_ref',
                     default=False,
                     action='store_true',
                     help='Use message passing as reference')
+parser.add_argument('--i', default=11)
 
 # --------------------------------- Misc --------------------------------- #
 parser.add_argument('--load_path', type=str,
@@ -91,12 +92,12 @@ torch.manual_seed(seed)
 
 obj = 'tardiness'
 
-i = 11
+i = args.i
 env = JobShopEnv(wip_TF=True, obj=obj, setup_type='sequence', instance_i=i)
 
 mc_i, job_dict, done, _ = env.reset()
 prev_job_ids = []
-batch_size = 20
+batch_size = 10
 
 while not done:
     if new_job_arrived(env, prev_job_ids):
@@ -133,7 +134,7 @@ while not done:
         best_obj_list = obj_list
         hidden = None
         
-        for step in tqdm(range(200)):
+        for step in range(200):
             with torch.no_grad():
                 _, action, _, _, _, hidden = model(state, best_state, hidden)
             # print(action.shape)
@@ -164,8 +165,8 @@ while not done:
                     # best_obj = new_obj
                     best_obj_list[b] = new_obj
             
-            if (step+1) % 100 == 0:
-                print(f"step=={step+1}\tbest_obj=={min(best_obj_list)}")
+            # if (step+1) % 10 == 0:
+            #     print(f"step=={step+1}\tbest_obj=={min(best_obj_list)}")
 
         best_chromosome = best_chromosome[np.array(best_obj_list).argmin()]
                 
@@ -178,6 +179,7 @@ while not done:
 
 obj_value = env.get_obj()
 print("performance of L2O for instance {}: {} - makespan: {}".format(i, obj_value, env.sim_t))
+np.savez_compressed(f"results/performance_{i}.npz", tardiness=obj_value[0], setup_time=obj_value[1], makespan=env.sim_t)
 
 
 
